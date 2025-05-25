@@ -1,0 +1,32 @@
+console.log("🖥️  INTERFACES GRÁFICAS PARA POSTGRESQL")
+console.log("=====================================")
+console.log("")
+
+console.log("1. 📊 pgAdmin (Oficial - Recomendado)")
+console.log("   - Download: https://www.pgadmin.org/download/")
+console.log("   - String de conexão: postgresql://localhost:5432")
+console.log("   - Banco: gestao-escolar")
+console.log("")
+
+console.log("2. 🌐 DBeaver (Multi-database)")
+console.log("   - Download: https://dbeaver.io/download/")
+console.log("   - Interface gráfica universal")
+console.log("   - Suporte a PostgreSQL e outros bancos")
+console.log("")
+
+console.log("3. 🔧 DataGrip (Profissional)")
+console.log("   - Download: https://www.jetbrains.com/datagrip/download/")
+console.log("   - IDE completa para bancos de dados")
+console.log("")
+
+console.log("4. 💻 Postico (Mac OS)")
+console.log("   - Download: https://eggerapps.at/postico/")
+console.log("   - Interface simples e intuitiva")
+console.log("")
+
+console.log("📋 COMANDOS ÚTEIS:")
+console.log("==================")
+console.log("• Verificar PostgreSQL: npm run check-db")
+console.log("• Popular banco: npm run seed")
+console.log("• Resetar banco: npm run reset-db")
+console.log("• Setup completo: npm run setup")

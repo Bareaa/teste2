@@ -1,0 +1,144 @@
+services:
+  # Banco de dados PostgreSQL
+  postgres:
+    image: postgres:15
+    container_name: escola_idiomas_db
+    environment:
+      POSTGRES_DB: escola_idiomas
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: escola123
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "5433:5432" # <--- ALTERADO AQUI! Usando 5433 no host
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/migrations:/docker-entrypoint-initdb.d/
+    networks:
+      - escola-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      start_period: 60s 
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Backend API 
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: escola_idiomas_backend
+    environment:
+      # Configurações do banco de dados
+      DB_HOST: postgres # Nome do serviço PostgreSQL na rede Docker
+      DB_PORT: 5432
+      DB_NAME: escola_idiomas
+      DB_USER: postgres
+      DB_PASSWORD: escola123
+      
+      # Configurações da aplicação
+      NODE_ENV: development
+      API_PORT: 3001
+      JWT_SECRET: sua-chave-secreta-jwt # IMPORTANTE: MUDAR ISSO EM PRODUÇÃO PARA UMA CHAVE SEGURA!
+      
+      # CORS (Cross-Origin Resource Sharing)
+      CORS_ORIGIN: http://localhost:3000
+      
+      # API Externa (ViaCEP)
+      VIACEP_API_URL: https://viacep.com.br/ws
+    ports:
+      - "3001:3001" # Mapeia a porta 3001 do container para a porta 3001 do host
+    depends_on:
+      postgres:
+        condition: service_healthy # Garante que o PostgreSQL esteja saudável antes de iniciar o backend
+    networks:
+      - escola-network
+    volumes:
+      - ./backend:/app # Monta o código fonte do backend para hot-reloading em desenvolvimento
+      - /app/node_modules # Impede que o node_modules local sobrescreva o do container
+    restart: unless-stopped # Reinicia o container se ele parar
+    command: npm run dev # Comando para iniciar o backend em modo de desenvolvimento
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: escola_idiomas_frontend
+    environment:
+      # URL do backend
+      REACT_APP_API_URL: http://localhost:3001/api
+      REACT_APP_API_INTERNAL_URL: http://backend:3001/api
+      
+      # Configurações do WhatsApp
+      REACT_APP_WHATSAPP_BASE_URL: https://api.whatsapp.com/send/?phone=55
+      REACT_APP_VIACEP_API_URL: https://viacep.com.br/ws # <-- Adicione esta linha
+      NODE_ENV: development
+
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - escola-network
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules # Impede que node_modules local sobrescreva o do container
+    restart: unless-stopped
+    command: npm run dev
+
+  # SonarQube (para análise de código - RQNF13)
+  sonarqube:
+    image: sonarqube:community
+    container_name: escola_idiomas_sonar
+    environment:
+      SONAR_JDBC_URL: jdbc:postgresql://postgres:5432/sonarqube
+      SONAR_JDBC_USERNAME: postgres
+      SONAR_JDBC_PASSWORD: escola123
+    ports:
+      - "9000:9000"
+    depends_on:
+      - postgres
+    networks:
+      - escola-network
+    volumes:
+      - sonar_data:/opt/sonarqube/data
+      - sonar_logs:/opt/sonarqube/logs
+      - sonar_extensions:/opt/sonarqube/extensions
+    restart: unless-stopped
+
+  # Container para testes (opcional - para executar testes E2E)
+  tests:
+    build:
+      context: ./tests
+      dockerfile: Dockerfile
+    container_name: escola_idiomas_tests
+    environment:
+      BASE_URL: http://frontend:3000
+      API_URL: http://backend:3001/api
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - escola-network
+    volumes:
+      - ./tests:/app
+      - ./test-results:/app/test-results
+    profiles:
+      - testing
+    command: tail -f /dev/null # Manter container ativo para execução manual
+
+networks:
+  escola-network:
+    driver: bridge
+    name: escola_idiomas_network
+
+volumes:
+  postgres_data:
+    name: escola_postgres_data
+  sonar_data:
+    name: escola_sonar_data
+  sonar_logs:
+    name: escola_sonar_logs
+  sonar_extensions:
+    name: escola_sonar_extensions
