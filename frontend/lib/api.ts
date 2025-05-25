@@ -1,45 +1,87 @@
-import { getCache, setCache, CACHE_KEYS } from './cache';
+import { getCache, setCache, clearCache, CACHE_KEYS, type CacheKey } from './cache';
 
 // Base URL for API requests
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 
+interface ApiError extends Error {
+  status?: number;
+  data?: any;
+}
+
 // Generic fetch function with caching
 async function fetchWithCache<T>(
   url: string,
-  cacheKey?: string,
+  cacheKey?: CacheKey,
   options: RequestInit = {}
 ): Promise<T> {
-  // Try to get from cache first
-  if (cacheKey) {
-    const cached = getCache<T>(cacheKey);
-    if (cached) return cached;
-  }
+  try {
+    // Try to get from cache first if it's a GET request
+    if (cacheKey && (!options.method || options.method === 'GET')) {
+      const cached = getCache<T>(cacheKey);
+      if (cached) return cached;
+    }
 
-  // If not in cache or no cache key, fetch from API
-  const response = await fetch(`${API_URL}${url}`, {
-    ...options,
-    headers: {
+    // Add authorization header if token exists
+    const token = localStorage.getItem('token');
+    const headers = {
       'Content-Type': 'application/json',
+      ...(token && { Authorization: `Bearer ${token}` }),
       ...options.headers,
-    },
-  });
+    };
 
-  if (!response.ok) {
-    throw new Error(`API error: ${response.statusText}`);
+    // Make API request
+    const response = await fetch(`${API_URL}${url}`, {
+      ...options,
+      headers,
+    });
+
+    if (!response.ok) {
+      const error = new Error(response.statusText) as ApiError;
+      error.status = response.status;
+      try {
+        error.data = await response.json();
+      } catch {
+        error.data = null;
+      }
+      throw error;
+    }
+
+    const data = await response.json();
+
+    // Save to cache if it's a GET request
+    if (cacheKey && (!options.method || options.method === 'GET')) {
+      setCache(cacheKey, data);
+    }
+
+    return data;
+  } catch (error) {
+    // Handle 401 unauthorized errors
+    if ((error as ApiError).status === 401) {
+      clearCache();
+      localStorage.removeItem('token');
+      window.location.href = '/login';
+    }
+    throw error;
   }
-
-  const data = await response.json();
-
-  // Save to cache if cache key provided
-  if (cacheKey) {
-    setCache(cacheKey, data);
-  }
-
-  return data;
 }
 
 // API functions with caching
 export const api = {
+  // Auth
+  async login(credentials: { username: string; password: string }) {
+    const response = await fetchWithCache('/auth/login', null, {
+      method: 'POST',
+      body: JSON.stringify(credentials),
+    });
+    localStorage.setItem('token', response.token);
+    return response;
+  },
+
+  async logout() {
+    localStorage.removeItem('token');
+    clearCache();
+  },
+
   // Estudantes
   async getEstudantes() {
     return fetchWithCache('/estudantes', CACHE_KEYS.ESTUDANTES);
